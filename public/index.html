@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Digital Dude — Leads</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Shown until a valid dashboard token is supplied -->
+  <div id="gate" class="gate" hidden>
+    <h1>Lead board</h1>
+    <p class="hint">Enter the dashboard token from the server's <code>.env</code>.</p>
+    <form id="gate-form">
+      <input type="password" id="gate-token" placeholder="DASHBOARD_TOKEN" autocomplete="current-password" required>
+      <button class="primary" type="submit">Open</button>
+    </form>
+    <p class="err" id="gate-err"></p>
+  </div>
+
+  <div id="app" hidden>
+    <header>
+      <div class="brand">Digital Dude <span>· leads</span></div>
+      <div class="pill" id="conn"><span class="dot"></span><span id="conn-text">checking…</span></div>
+      <div class="spacer"></div>
+      <input type="search" id="search" placeholder="Search name, number, business…" autocomplete="off">
+      <button class="ghost" id="refresh" title="Refresh now">↻</button>
+      <button class="ghost" id="theme" title="Toggle light / dark">◐</button>
+      <button class="ghost" id="logout" title="Forget token">Sign out</button>
+    </header>
+
+    <section class="stats" id="stats"></section>
+    <main class="board" id="board"></main>
+  </div>
+
+  <div class="drawer-backdrop" id="backdrop" hidden></div>
+
+  <aside class="drawer" id="drawer" hidden aria-label="Lead detail">
+    <header>
+      <h2 id="d-title">Lead</h2>
+      <div class="spacer"></div>
+      <button class="ghost" id="d-close" title="Close">✕</button>
+    </header>
+
+    <div class="body">
+      <p class="hint" id="d-sub"></p>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="d-stage">Stage</label>
+          <select id="d-stage"></select>
+        </div>
+        <div class="field">
+          <label for="d-owner">Owner</label>
+          <input type="text" id="d-owner" placeholder="who's on it">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="d-name">Name</label>
+        <input type="text" id="d-name">
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="d-business">Business</label>
+          <input type="text" id="d-business">
+        </div>
+        <div class="field">
+          <label for="d-service">Service</label>
+          <input type="text" id="d-service" placeholder="website, seo, ads…">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="d-timeline">Timeline</label>
+          <input type="text" id="d-timeline">
+        </div>
+        <div class="field">
+          <label for="d-value">Deal value</label>
+          <input type="text" id="d-value" placeholder="internal only">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="d-notes">Notes</label>
+        <textarea id="d-notes" placeholder="What was agreed, what's next…"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Conversation</label>
+        <div class="transcript" id="d-transcript"></div>
+      </div>
+
+      <div class="field">
+        <label>Flags raised by the bot</label>
+        <div class="meta" id="d-tags"></div>
+      </div>
+
+      <button class="danger" id="d-delete">Delete lead</button>
+    </div>
+
+    <footer>
+      <textarea id="d-reply" placeholder="Reply on WhatsApp as Digital Dude…"></textarea>
+      <button class="primary" id="d-send">Send</button>
+    </footer>
+  </aside>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

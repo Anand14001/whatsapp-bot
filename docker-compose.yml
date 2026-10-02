@@ -1,0 +1,84 @@
+# Full stack: Evolution API (WhatsApp session) + Postgres + Redis + this bot.
+# Local dev: `docker compose up -d evolution-api postgres redis` and run the bot
+# with `npm run dev` so you get hot reload. Production: bring up everything.
+#
+# SETUP_GUIDE.md Step 2 (Evolution) and Step 12 (deploy) explain the choices here.
+
+services:
+  evolution-api:
+    # Evolution API — Go build. Image names and tags move between releases: take the
+    # current one from github.com/EvolutionAPI/evolution-api and pin an exact tag
+    # rather than :latest in production.
+    image: evoapicloud/evolution-api:latest
+    container_name: evolution-api
+    restart: unless-stopped
+    ports:
+      # Local only. DELETE this block in production — the bot reaches Evolution
+      # over the private network, and a published port exposes your WhatsApp session.
+      - "8081:8080"
+    environment:
+      SERVER_URL: ${SERVER_URL:-http://localhost:8081}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:?set EVOLUTION_API_KEY in .env}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "false"
+
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://evolution:evolution@postgres:5432/evolution
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "false"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_LOCAL_ENABLED: "false"
+
+      LOG_LEVEL: ERROR,WARN,INFO
+      DEL_INSTANCE: "false"      # never auto-delete a linked session
+      QRCODE_LIMIT: "10"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - evolution_instances:/evolution/instances
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: evolution-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution
+      POSTGRES_DB: evolution
+    volumes:
+      - evolution_pg:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: evolution-redis
+    restart: unless-stopped
+    volumes:
+      - evolution_redis:/data
+
+  bot:
+    build: .
+    container_name: dd-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Service name, not localhost — localhost inside a container is the container.
+      EVOLUTION_API_URL: http://evolution-api:8080
+      DATA_DIR: /app/data
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data         # leads.json + leads.jsonl survive redeploys
+    depends_on:
+      - evolution-api
+
+volumes:
+  evolution_instances:
+  evolution_pg:
+  evolution_redis:
