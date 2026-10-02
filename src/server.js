@@ -92,25 +92,33 @@ function normalise(body = {}) {
 const CONNECTION_EVENTS = new Set(['connection', 'connection.update', 'connection_update']);
 const MESSAGE_EVENTS = new Set(['message', 'messages', 'messages.upsert', 'messages_upsert']);
 
-app.post('/webhook/:secret', (req, res) => {
+/**
+ * Serverless instances are frozen the moment the response is flushed, so work
+ * started after an early ACK is simply never finished — the reply never gets
+ * sent. On Vercel the handler is awaited and the ACK comes last; on a real host
+ * we still ACK first, because Evolution retries what it thinks failed and a
+ * retry means the customer gets the same reply twice.
+ */
+const DEFER_ACK = Boolean(process.env.VERCEL);
+
+app.post('/webhook/:secret', async (req, res) => {
   if (!SECRET || !secretOk(req.params.secret)) {
     console.warn('[webhook] bad secret — rejected');
     return res.sendStatus(401);
   }
 
-  // ACK immediately. Evolution retries what it thinks failed, and a retry means
-  // the customer gets the same reply twice.
-  res.sendStatus(200);
+  const ack = () => { if (!res.headersSent) res.sendStatus(200); };
+  if (!DEFER_ACK) ack();
 
   const event = String(req.body?.event ?? req.body?.Event ?? '').toLowerCase();
 
   if (CONNECTION_EVENTS.has(event)) {
     console.log('[evolution] connection:', JSON.stringify(req.body?.data ?? req.body).slice(0, 200));
-    return;
+    return ack();
   }
 
   // Receipts, presence, sent-echoes — anything that is not an inbound message.
-  if (event && !MESSAGE_EVENTS.has(event)) return;
+  if (event && !MESSAGE_EVENTS.has(event)) return ack();
 
   const m = normalise(req.body);
 
@@ -118,17 +126,17 @@ app.post('/webhook/:secret', (req, res) => {
     if (process.env.WEBHOOK_DEBUG) {
       console.log('[webhook] unrecognised payload:', JSON.stringify(req.body).slice(0, 600));
     }
-    return;
+    return ack();
   }
 
-  if (m.fromMe) return;                              // the bot's own messages — ignore, or loop forever
-  if (m.remoteJid.endsWith('@g.us')) return;         // group chat
-  if (m.remoteJid === 'status@broadcast') return;    // someone's status update
-  if (m.remoteJid.endsWith('@newsletter')) return;   // channel
+  if (m.fromMe) return ack();                              // the bot's own messages — ignore, or loop forever
+  if (m.remoteJid.endsWith('@g.us')) return ack();         // group chat
+  if (m.remoteJid === 'status@broadcast') return ack();    // someone's status update
+  if (m.remoteJid.endsWith('@newsletter')) return ack();   // channel
 
   const text = extractText(m.message);
 
-  handleIncomingMessage({
+  const work = handleIncomingMessage({
     remoteJid: m.remoteJid,                          // reply to this — works for @s.whatsapp.net and @lid
     from: m.remoteJid.split('@')[0],                 // digits, for logs and lead records
     messageId: m.id,
@@ -136,6 +144,9 @@ app.post('/webhook/:secret', (req, res) => {
     text: typeof text === 'string' ? text.trim() : '',
     profileName: m.pushName,
   }).catch(err => console.error('[bot] handler failed:', err));
+
+  if (DEFER_ACK) await work;
+  ack();
 });
 
 app.use('/api', api);
