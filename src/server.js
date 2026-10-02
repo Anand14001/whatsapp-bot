@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
 import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { handleIncomingMessage } from './bot.js';
 import { api } from './api.js';
 import { connectionState } from './whatsapp.js';
@@ -137,31 +139,41 @@ app.post('/webhook/:secret', (req, res) => {
 });
 
 app.use('/api', api);
-app.use('/', express.static('public'));
+const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
+app.use('/', express.static(PUBLIC_DIR));
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, async () => {
-  console.log(`[server] listening on ${PORT}`);
-  console.log(`[server] dashboard: http://localhost:${PORT}/?token=<DASHBOARD_TOKEN>`);
-
-  for (const k of ['EVOLUTION_API_URL', 'EVOLUTION_API_KEY', 'WEBHOOK_SECRET', 'DASHBOARD_TOKEN', 'GEMINI_API_KEY']) {
-    if (!process.env[k]) console.warn(`[server] WARNING: ${k} is not set`);
-  }
-  console.log('[evolution] connection state:', await connectionState());
-});
+export default app;
 
 /**
- * A dropped WhatsApp session goes silent rather than erroring, so something has
- * to watch it. Logs a line on every change — point your alerting at this.
+ * Serverless platforms import this file for the handler above and run each
+ * request in a short-lived instance, where binding a port and holding an
+ * interval timer are both meaningless. Only start them on a real host.
  */
-let lastState = null;
-setInterval(async () => {
-  const state = await connectionState();
-  if (state !== lastState) {
-    console.log(`[evolution] state changed: ${lastState ?? 'startup'} → ${state}`);
-    if (state !== 'open') console.warn('[evolution] NOT CONNECTED — re-scan the QR from the handset');
-    lastState = state;
-  }
-}, Number(process.env.CONNECTION_CHECK_MS ?? 120_000)).unref();
+if (!process.env.VERCEL) {
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, async () => {
+    console.log(`[server] listening on ${PORT}`);
+    console.log(`[server] dashboard: http://localhost:${PORT}/?token=<DASHBOARD_TOKEN>`);
+
+    for (const k of ['EVOLUTION_API_URL', 'EVOLUTION_API_KEY', 'WEBHOOK_SECRET', 'DASHBOARD_TOKEN', 'GEMINI_API_KEY']) {
+      if (!process.env[k]) console.warn(`[server] WARNING: ${k} is not set`);
+    }
+    console.log('[evolution] connection state:', await connectionState());
+  });
+
+  /**
+   * A dropped WhatsApp session goes silent rather than erroring, so something has
+   * to watch it. Logs a line on every change — point your alerting at this.
+   */
+  let lastState = null;
+  setInterval(async () => {
+    const state = await connectionState();
+    if (state !== lastState) {
+      console.log(`[evolution] state changed: ${lastState ?? 'startup'} → ${state}`);
+      if (state !== 'open') console.warn('[evolution] NOT CONNECTED — re-scan the QR from the handset');
+      lastState = state;
+    }
+  }, Number(process.env.CONNECTION_CHECK_MS ?? 120_000)).unref();
+}

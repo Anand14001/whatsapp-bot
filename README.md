@@ -90,3 +90,20 @@ put it behind HTTPS, and swap in per-user auth before more than a couple of peop
 - Repeated `fallback` tags on a topic mean a missing fact: confirm it with the team, add it to
   `SALES_ASSISTANT_QA.md`, then to `src/knowledgeBase.js`
 - A spike in `guard_invented_price` means the prompt needs tightening, not the guard loosening
+
+## Deploying to Vercel
+
+`api/index.js` exports the Express app and `vercel.json` rewrites every path to
+it, so routes behave the same as they do locally. Set the environment variables
+from `.env.example` in Project Settings → Environment Variables (Vercel does not
+read `.env`), then point Evolution at
+`https://<your-deployment>/webhook/<WEBHOOK_SECRET>`.
+
+**Lead storage does not survive on Vercel.** The lead store is a JSON file, and a
+serverless instance only has a writable `/tmp` that is discarded when the
+instance is recycled — each instance also has its own copy, so two requests can
+see different boards. On Vercel the bot replies correctly but the Kanban board is
+effectively scratch space. For a board you can rely on, either run the container
+in `Dockerfile` on a host with a real disk (Fly, Railway, a VPS), or replace the
+file store in `src/leads.js` with a database. The connection-state watcher is
+also skipped on Vercel, since nothing runs between requests.

@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DIR = process.env.DATA_DIR ?? 'data';
+// Serverless hosts ship a read-only bundle; /tmp is the only writable path there
+// and it dies with the instance. See the persistence note in README.
+const DIR = process.env.DATA_DIR ?? (process.env.VERCEL ? '/tmp/data' : 'data');
 const STORE = path.join(DIR, 'leads.json');       // current state — the Kanban board reads this
 const AUDIT = path.join(DIR, 'leads.jsonl');      // append-only history — never rewritten
 
@@ -10,7 +12,20 @@ export const STAGES = ['new', 'contacted', 'qualified', 'proposal', 'won', 'lost
 /** Fields the dashboard is allowed to write. Anything else in a PATCH is ignored. */
 const EDITABLE = ['stage', 'name', 'business', 'service', 'timeline', 'notes', 'value', 'owner'];
 
-fs.mkdirSync(DIR, { recursive: true });
+/**
+ * Created on first write rather than at import. On a read-only filesystem this
+ * used to throw during module load and kill the process before a single route
+ * was served.
+ */
+function ensureDir() {
+  try {
+    fs.mkdirSync(DIR, { recursive: true });
+    return true;
+  } catch (err) {
+    console.error(`[leads] cannot create ${DIR}:`, err.message);
+    return false;
+  }
+}
 
 function load() {
   try {
@@ -23,12 +38,18 @@ function load() {
 
 /** Write to a temp file then rename — a crash mid-write can't leave a truncated store. */
 function save(db) {
-  const tmp = `${STORE}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-  fs.renameSync(tmp, STORE);
+  if (!ensureDir()) return;
+  try {
+    const tmp = `${STORE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
+    fs.renameSync(tmp, STORE);
+  } catch (err) {
+    console.error('[leads] store write failed:', err.message);
+  }
 }
 
 function audit(entry) {
+  if (!ensureDir()) return;
   try {
     fs.appendFileSync(AUDIT, JSON.stringify({ at: new Date().toISOString(), ...entry }) + '\n');
   } catch (err) {
